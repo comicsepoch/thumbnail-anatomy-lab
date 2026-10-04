@@ -7,10 +7,37 @@ import CompareStrip from "@/components/CompareStrip";
 import AnalysisCard from "@/components/AnalysisCard";
 import { extractPalette, loadImage, resizeToDataUrl } from "@/lib/colorExtract";
 import { runOCR } from "@/lib/ocr";
-import type { ThumbnailItem } from "@/lib/types";
+import { clientHasKey, runClientAnalysis } from "@/lib/clientAnalyze";
+import type { AIStatus, ThumbnailItem } from "@/lib/types";
 
 function makeId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
+
+/**
+ * Tries the secure server route first (works on a Node host like Vercel,
+ * where the API key never reaches the browser). If there's no server at all
+ * — e.g. a static export on GitHub Pages — that request 404s or returns
+ * non-JSON, so we transparently fall back to calling the vision model
+ * directly from the browser with a build-time public key, if one was set.
+ */
+async function runAnalysis(dataUrl: string): Promise<AIStatus> {
+  try {
+    const res = await fetch("/api/analyze", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ dataUrl }),
+    });
+    const contentType = res.headers.get("content-type") || "";
+    if (!contentType.includes("application/json")) {
+      throw new Error("No server API route available");
+    }
+    const json = await res.json();
+    if (json.ok) return { ok: true, data: json.data };
+    return { ok: false, reason: json.reason ?? "error", message: json.message };
+  } catch {
+    return runClientAnalysis(dataUrl);
+  }
 }
 
 export default function Home() {
@@ -20,10 +47,15 @@ export default function Home() {
 
   useEffect(() => {
     fetch("/api/key-status")
-      .then((r) => r.json())
+      .then((r) => {
+        const contentType = r.headers.get("content-type") || "";
+        if (!contentType.includes("application/json")) throw new Error("no api route");
+        return r.json();
+      })
       .then((d) => setHasKey(Boolean(d.hasKey)))
-      .catch(() => setHasKey(false));
+      .catch(() => setHasKey(clientHasKey()));
   }, []);
+
 
   const updateItem = useCallback((id: string, patch: Partial<ThumbnailItem>) => {
     setItems((prev) => prev.map((it) => (it.id === id ? { ...it, ...patch } : it)));
@@ -55,26 +87,9 @@ export default function Home() {
         updateItem(item.id, { textBlocks });
 
         updateItem(item.id, { stage: "ai" });
-        try {
-          const { dataUrl } = resizeToDataUrl(img, 1536, 0.92);
-          const res = await fetch("/api/analyze", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ dataUrl }),
-          });
-          const json = await res.json();
-          if (json.ok) {
-            updateItem(item.id, { ai: { ok: true, data: json.data } });
-          } else {
-            updateItem(item.id, {
-              ai: { ok: false, reason: json.reason ?? "error", message: json.message },
-            });
-          }
-        } catch (err) {
-          updateItem(item.id, {
-            ai: { ok: false, reason: "error", message: err instanceof Error ? err.message : "Network error" },
-          });
-        }
+        const { dataUrl } = resizeToDataUrl(img, 1536, 0.92);
+        const aiResult = await runAnalysis(dataUrl);
+        updateItem(item.id, { ai: aiResult });
 
         updateItem(item.id, { stage: "done" });
       } catch (err) {
@@ -184,8 +199,8 @@ export default function Home() {
       )}
 
       <footer className="mt-10 border-t border-navy-800 pt-5 text-center text-[11px] text-navy-600">
-        Colors &amp; OCR run fully client-side. Font / anatomy / verdict call a vision model server-side using your
-        own API key. Built for learning thumbnail design, not for copying creators&apos; work verbatim.
+        Colors &amp; OCR run fully client-side. Font / anatomy / verdict call a vision model using an API key
+        configured for this deployment. Built for learning thumbnail design, not for copying creators&apos; work verbatim.
       </footer>
     </main>
   );
