@@ -1,0 +1,2 @@
+:HL["/thumbnail-anatomy-lab/_next/static/chunks/2ytvgp1rb4iag.css","style"]
+0:{"tree":{"name":"","param":null,"prefetchHints":4176,"slots":{"children":{"name":"/_not-found","param":null,"prefetchHints":4192,"slots":{"children":{"name":"__PAGE__","param":null,"prefetchHints":4256,"slots":null}}}}},"staleTime":300,"buildId":"9azmW3FRrKQzaw3m6L2f5"}
