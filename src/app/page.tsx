@@ -1,10 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import Dropzone from "@/components/Dropzone";
-import KeyWarning from "@/components/KeyWarning";
-import CompareStrip from "@/components/CompareStrip";
-import AnalysisCard from "@/components/AnalysisCard";
+import TopNav, { type TabKey } from "@/components/TopNav";
+import AnalyzeView from "@/components/AnalyzeView";
+import VaultView from "@/components/VaultView";
+import CompareView from "@/components/CompareView";
 import { extractPalette, loadImage, resizeToDataUrl } from "@/lib/colorExtract";
 import { runOCR } from "@/lib/ocr";
 import { clientHasKey, runClientAnalysis } from "@/lib/clientAnalyze";
@@ -43,6 +43,7 @@ async function runAnalysis(dataUrl: string): Promise<AIStatus> {
 export default function Home() {
   const [items, setItems] = useState<ThumbnailItem[]>([]);
   const [hasKey, setHasKey] = useState<boolean | null>(null);
+  const [tab, setTab] = useState<TabKey>("analyze");
   const processedRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
@@ -159,48 +160,29 @@ export default function Home() {
         </div>
         <p className="max-w-2xl text-sm text-navy-500 sm:text-base">
           Drop in up to 5 YouTube thumbnails and get a full design breakdown — extracted text, dominant colors,
-          font guesses, composition anatomy, text treatment and a design verdict you can take into your next edit.
+          font guesses, composition anatomy, text treatment, a mobile readability check, a 15-point commandments
+          score, and a design verdict you can take into your next edit.
         </p>
       </header>
 
-      {hasKey === false && <KeyWarning />}
+      <TopNav active={tab} onChange={setTab} />
 
-      <Dropzone onFiles={handleFiles} currentCount={items.length} />
-
-      {items.length > 0 && (
-        <div className="flex items-center justify-between">
-          <p className="text-xs text-navy-500">
-            {items.length} thumbnail{items.length !== 1 ? "s" : ""} loaded
-          </p>
-          <button
-            onClick={handleClearAll}
-            className="rounded-lg border border-navy-600 bg-navy-800 px-3 py-1.5 text-xs font-medium text-navy-400 transition hover:border-red-500/50 hover:text-red-400"
-          >
-            Clear all
-          </button>
-        </div>
+      {tab === "analyze" && (
+        <AnalyzeView
+          items={items}
+          hasKey={hasKey}
+          onFiles={handleFiles}
+          onRemove={handleRemove}
+          onClearAll={handleClearAll}
+        />
       )}
-
-      <CompareStrip items={items} />
-
-      {items.length === 0 ? (
-        <div className="mt-6 flex flex-1 flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-navy-700 py-16 text-center">
-          <p className="font-display text-lg text-navy-500">No thumbnails yet</p>
-          <p className="max-w-sm text-sm text-navy-600">
-            Upload 1–5 thumbnails above to start dissecting typography, color, and layout like a pro designer.
-          </p>
-        </div>
-      ) : (
-        <div className="flex flex-col gap-6">
-          {items.map((item) => (
-            <AnalysisCard key={item.id} item={item} onRemove={handleRemove} />
-          ))}
-        </div>
-      )}
+      {tab === "vault" && <VaultView />}
+      {tab === "compare" && <CompareView items={items} />}
 
       <footer className="mt-10 border-t border-navy-800 pt-5 text-center text-[11px] text-navy-600">
         Colors &amp; OCR run fully client-side. Font / anatomy / verdict call a vision model using an API key
-        configured for this deployment. Built for learning thumbnail design, not for copying creators&apos; work verbatim.
+        configured for this deployment. Your Vault is stored locally in this browser only. Built for learning
+        thumbnail design, not for copying creators&apos; work verbatim.
       </footer>
     </main>
   );

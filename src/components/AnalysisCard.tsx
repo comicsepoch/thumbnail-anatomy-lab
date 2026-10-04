@@ -4,6 +4,13 @@ import { useState } from "react";
 import type { Hierarchy, ThumbnailItem } from "@/lib/types";
 import StageBadge from "./StageBadge";
 import { buildReportText } from "@/lib/report";
+import AlightMotionPanel from "./AlightMotionPanel";
+import MobileSimSection from "./MobileSimSection";
+import CommandmentsSection from "./CommandmentsSection";
+import FontSourceLink from "./FontSourceLink";
+import QuizMode from "./QuizMode";
+import VaultSaveButton from "./VaultSaveButton";
+import ExportCardButton from "./ExportCardButton";
 
 const HIERARCHY_STYLE: Record<Hierarchy, string> = {
   headline: "bg-accent/15 text-accent ring-accent/40",
@@ -12,7 +19,7 @@ const HIERARCHY_STYLE: Record<Hierarchy, string> = {
   stamp: "bg-emerald-400/15 text-emerald-300 ring-emerald-400/30",
 };
 
-function SectionHeader({ n, title }: { n: number; title: string }) {
+function SectionHeader({ n, title }: { n: number | string; title: string }) {
   return (
     <div className="mb-3 flex items-center gap-2.5">
       <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-navy-700 text-[11px] font-bold text-accent ring-1 ring-navy-600">
@@ -37,6 +44,7 @@ export default function AnalysisCard({
   onRemove: (id: string) => void;
 }) {
   const [copied, setCopied] = useState(false);
+  const [quizMode, setQuizMode] = useState(false);
 
   const handleCopy = async () => {
     try {
@@ -75,7 +83,19 @@ export default function AnalysisCard({
             </div>
           </div>
         </div>
-        <div className="flex shrink-0 items-center gap-2 self-end sm:self-auto">
+        <div className="flex shrink-0 flex-wrap items-center gap-2 self-end sm:self-auto">
+          <VaultSaveButton item={item} />
+          <ExportCardButton item={item} />
+          <button
+            onClick={() => setQuizMode((q) => !q)}
+            className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition ${
+              quizMode
+                ? "border-accent/60 bg-accent/15 text-accent"
+                : "border-navy-600 bg-navy-800 text-white hover:border-accent/60 hover:text-accent"
+            }`}
+          >
+            {quizMode ? "Exit Quiz" : "Quiz Mode"}
+          </button>
           <button
             onClick={handleCopy}
             disabled={item.stage === "idle"}
@@ -145,9 +165,14 @@ export default function AnalysisCard({
         {/* 2. Color palette */}
         <div>
           <SectionHeader n={2} title="Color Palette" />
-          {item.palette?.swatches.length ? (
+          {quizMode ? (
+            <div className="rounded-lg border border-dashed border-navy-700 bg-navy-850/50 p-3 text-center">
+              <p className="text-xs text-navy-500">Palette hidden while Quiz Mode is on — guess in the quiz below.</p>
+            </div>
+          ) : item.palette?.swatches.length ? (
             <>
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              <AlightMotionPanel palette={item.palette} />
+              <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
                 {item.palette.swatches.map((s, i) => (
                   <div key={i} className="flex items-center gap-2 rounded-lg bg-navy-850 p-2 ring-1 ring-navy-700">
                     <span
@@ -207,7 +232,11 @@ export default function AnalysisCard({
         {/* 3. Font identification */}
         <div>
           <SectionHeader n={3} title="Font Identification" />
-          {aiReady && item.ai!.ok && item.ai!.data.fonts.length ? (
+          {quizMode ? (
+            <div className="rounded-lg border border-dashed border-navy-700 bg-navy-850/50 p-3 text-center">
+              <p className="text-xs text-navy-500">Fonts hidden while Quiz Mode is on — guess in the quiz below.</p>
+            </div>
+          ) : aiReady && item.ai!.ok && item.ai!.data.fonts.length ? (
             <ul className="space-y-2">
               {item.ai!.data.fonts.map((f, i) => (
                 <li key={i} className="rounded-lg bg-navy-850 p-2.5 ring-1 ring-navy-700">
@@ -229,6 +258,7 @@ export default function AnalysisCard({
                   <p className="text-xs text-navy-500">
                     Free alt: <span className="text-accent">{f.googleFontAlt}</span>
                   </p>
+                  <FontSourceLink fontGuess={f.fontGuess} googleFontAlt={f.googleFontAlt} />
                 </li>
               ))}
             </ul>
@@ -377,6 +407,38 @@ export default function AnalysisCard({
           ) : (
             <EmptyNote text="Waiting…" />
           )}
+        </div>
+
+        {/* Quiz mode */}
+        {quizMode && (
+          <div className="lg:col-span-2">
+            <SectionHeader n="?" title="Guess the Font & Color Quiz" />
+            <QuizMode ai={item.ai?.ok ? item.ai.data : undefined} palette={item.palette} />
+          </div>
+        )}
+
+        {/* 7. Phone-size readability simulator */}
+        <div className="lg:col-span-2">
+          <SectionHeader n={7} title="Mobile Readability Simulator" />
+          <MobileSimSection
+            objectUrl={item.objectUrl}
+            fileName={item.fileName}
+            width={item.width}
+            height={item.height}
+            textBlocks={item.textBlocks ?? []}
+          />
+        </div>
+
+        {/* 8. Thumbnail commandments checklist */}
+        <div className="lg:col-span-2">
+          <SectionHeader n={8} title="Thumbnail Commandments" />
+          <CommandmentsSection
+            ai={item.ai?.ok ? item.ai.data : undefined}
+            palette={item.palette}
+            textBlocks={item.textBlocks}
+            width={item.width}
+            height={item.height}
+          />
         </div>
       </div>
     </div>

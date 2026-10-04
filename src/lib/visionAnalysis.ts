@@ -1,3 +1,5 @@
+import type { AIAnalysis, AIFontGuess, AITextTreatment, AIGrading } from "./types";
+
 // Shared, isomorphic (works in both the browser and a Node server route)
 // vision-analysis logic: the prompt, the Gemini call + model fallback chain,
 // and response normalization. Used by src/app/api/analyze/route.ts when
@@ -25,8 +27,30 @@ export const SCHEMA_PROMPT = `You are a senior YouTube thumbnail designer and ty
   "verdict": {
     "styleSummary": "one punchy line naming the style family/genre this thumbnail belongs to, e.g. 'Indian ed-tech cinematic style, PW-like'",
     "tips": ["tip 1 for recreating this look in a mobile design app", "tip 2", "tip 3"]
+  },
+  "grading": {
+    "colorHarmony": "cohesive" | "mixed",
+    "faceBackgroundContrast": "high" | "medium" | "low" | "n/a",
+    "textBackgroundContrast": "high" | "medium" | "low",
+    "emotionStrength": "strong" | "mild" | "none",
+    "hasNumberOrResultAnchor": boolean,
+    "propRelevance": "relevant" | "generic" | "none",
+    "overGlowOnSkin": boolean,
+    "hierarchyConsistent": boolean,
+    "clutterLevel": "clean" | "moderate" | "busy"
   }
 }
+
+The "grading" block feeds a 15-point pro thumbnail checklist, so grade honestly and strictly like a professional thumbnail design reviewer:
+- colorHarmony: "cohesive" if the palette reads as one color family / clear 60-30-10, "mixed" if colors fight each other.
+- faceBackgroundContrast: how well a present face pops against its background ("n/a" if no face).
+- textBackgroundContrast: how legible the text is against what's behind it.
+- emotionStrength: how strongly the subject's expression reads at a glance ("none" if no face/expression).
+- hasNumberOrResultAnchor: true if there's a number, stat, "%", "Part N", ranking, or concrete result visible anywhere.
+- propRelevance: are visible props actually relevant to the topic, or generic/none.
+- overGlowOnSkin: true only if glow/light effects are visibly blown out on skin tones.
+- hierarchyConsistent: true if text sizes clearly rank by importance (headline obviously biggest, etc).
+- clutterLevel: overall visual busyness of the frame.
 
 Look closely and zoom mentally into every text region, the subject's face, and the background texture before answering — accuracy matters more than speed. Be specific and visual, naming actual colors, props and effects you can see rather than generic placeholders. If there is no text at all, return empty arrays for fonts/textTreatment. Only output the JSON object.`;
 
@@ -73,7 +97,7 @@ async function callGeminiModel(
         ],
         generationConfig: {
           temperature: 0.35,
-          maxOutputTokens: 2500,
+          maxOutputTokens: 3200,
           responseMimeType: "application/json",
         },
       }),
@@ -143,7 +167,7 @@ export async function callOpenAI(dataUrl: string, apiKey: string, model = "gpt-4
         },
       ],
       temperature: 0.4,
-      max_tokens: 1400,
+      max_tokens: 1800,
     }),
   });
 
@@ -157,12 +181,13 @@ export async function callOpenAI(dataUrl: string, apiKey: string, model = "gpt-4
   return extractJson(content);
 }
 
-export function normalize(raw: unknown, provider: string) {
+export function normalize(raw: unknown, provider: string): AIAnalysis {
   const r = (raw ?? {}) as Record<string, unknown>;
-  const fonts = Array.isArray(r.fonts) ? r.fonts : [];
-  const textTreatment = Array.isArray(r.textTreatment) ? r.textTreatment : [];
+  const fonts = (Array.isArray(r.fonts) ? r.fonts : []) as AIFontGuess[];
+  const textTreatment = (Array.isArray(r.textTreatment) ? r.textTreatment : []) as AITextTreatment[];
   const anatomy = (r.anatomy as Record<string, unknown>) || {};
   const verdict = (r.verdict as Record<string, unknown>) || {};
+  const grading = (r.grading as Record<string, unknown>) || {};
 
   return {
     fonts,
@@ -170,15 +195,36 @@ export function normalize(raw: unknown, provider: string) {
       facePresent: Boolean(anatomy.facePresent),
       expression: String(anatomy.expression ?? "unknown"),
       pointingDirection: String(anatomy.pointingDirection ?? "none"),
-      props: Array.isArray(anatomy.props) ? anatomy.props : [],
+      props: (Array.isArray(anatomy.props) ? anatomy.props : []) as string[],
       backgroundType: String(anatomy.backgroundType ?? "unknown"),
-      effects: Array.isArray(anatomy.effects) ? anatomy.effects : [],
+      effects: (Array.isArray(anatomy.effects) ? anatomy.effects : []) as string[],
       layoutPattern: String(anatomy.layoutPattern ?? "unknown"),
     },
     textTreatment,
     verdict: {
       styleSummary: String(verdict.styleSummary ?? "Style unclear"),
-      tips: Array.isArray(verdict.tips) ? verdict.tips : [],
+      tips: (Array.isArray(verdict.tips) ? verdict.tips : []) as string[],
+    },
+    grading: {
+      colorHarmony: grading.colorHarmony === "cohesive" ? "cohesive" : "mixed",
+      faceBackgroundContrast: ["high", "medium", "low", "n/a"].includes(String(grading.faceBackgroundContrast))
+        ? (grading.faceBackgroundContrast as AIGrading["faceBackgroundContrast"])
+        : "n/a",
+      textBackgroundContrast: ["high", "medium", "low"].includes(String(grading.textBackgroundContrast))
+        ? (grading.textBackgroundContrast as "high" | "medium" | "low")
+        : "medium",
+      emotionStrength: ["strong", "mild", "none"].includes(String(grading.emotionStrength))
+        ? (grading.emotionStrength as "strong" | "mild" | "none")
+        : "none",
+      hasNumberOrResultAnchor: Boolean(grading.hasNumberOrResultAnchor),
+      propRelevance: ["relevant", "generic", "none"].includes(String(grading.propRelevance))
+        ? (grading.propRelevance as "relevant" | "generic" | "none")
+        : "none",
+      overGlowOnSkin: Boolean(grading.overGlowOnSkin),
+      hierarchyConsistent: grading.hierarchyConsistent !== false,
+      clutterLevel: ["clean", "moderate", "busy"].includes(String(grading.clutterLevel))
+        ? (grading.clutterLevel as "clean" | "moderate" | "busy")
+        : "moderate",
     },
     provider,
   };
